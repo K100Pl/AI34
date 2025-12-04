@@ -95,8 +95,14 @@ for j = 1:N-1
     follower_labels{j} = text(500, 500, sprintf('F%d', j), 'FontSize', font_size, 'FontWeight', 'bold');
 end
 
+%% Définition des edges pour la métrique de formation (Q2.ii)
+% Edges uniques du graphe de formation (7 edges pour rigidité)
+edges = [1,2; 1,3; 1,4; 2,3; 2,4; 3,4; 4,5];
+num_edges = size(edges, 1);
+
 %% Data Saving Setup
 robot_distance = zeros(N+1, iterations);  % N distances + timestamp
+formation_error = zeros(1, iterations);   % E(t) = Σ(d - d*)² (Q2.ii)
 goal_distance = [];
 start_time = tic;
 
@@ -181,6 +187,21 @@ for t = 1:iterations
     end
     leader_label.Position = x(1:2, 1) + [-0.1;0.1];
     
+    %% 5. MÉTRIQUE DE FORMATION (Q2.ii)
+    % E(t) = Σ(d_actual - d_desired)² pour tous les edges
+    E_t = 0;
+    for e = 1:num_edges
+        i_node = edges(e, 1);
+        j_node = edges(e, 2);
+        % Distance actuelle
+        d_actual = norm(x(1:2, i_node) - x(1:2, j_node));
+        % Distance désirée (calculée depuis les offsets courants)
+        d_desired = norm(current_offsets(i_node,:) - current_offsets(j_node,:));
+        % Erreur au carré
+        E_t = E_t + (d_actual - d_desired)^2;
+    end
+    formation_error(t) = E_t;
+
     % Data Saving - distances entre robots consécutifs
     for d = 1:N-1
         robot_distance(d,t) = norm(x(1:2,d) - x(1:2,d+1), 2);
@@ -193,8 +214,26 @@ for t = 1:iterations
     r.step();
 end
 
+%% Sauvegarde des données
 save('DistanceData.mat', 'robot_distance');
 save('GoalData.mat', 'goal_distance');
+save('FormationError.mat', 'formation_error', 'edges');
+
+%% Affichage des statistiques de formation (Q2.ii)
+fprintf('\n=== MÉTRIQUE DE FORMATION (Q2.ii) ===\n');
+fprintf('E(t) = Σ(d_actual - d_desired)²\n\n');
+
+% Ignorer les 200 premières itérations (transitoire)
+steady_state = formation_error(200:end);
+
+fprintf('Statistiques (après convergence):\n');
+fprintf('  Mean E(t):     %.6f\n', mean(steady_state));
+fprintf('  Std E(t):      %.6f\n', std(steady_state));
+fprintf('  Max E(t):      %.6f\n', max(steady_state));
+fprintf('  Min E(t):      %.6f\n', min(steady_state));
+fprintf('  RMSE:          %.4f m\n', sqrt(mean(steady_state)/num_edges));
+fprintf('  Erreur finale: %.6f\n', formation_error(end));
+
 r.debug();
 
 %% Helper Functions (Identique)
