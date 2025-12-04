@@ -1,5 +1,4 @@
-% SY28 Project - Version complète avec Obstacles et Reconfiguration
-% Correction: Position des obstacles ajustée pour éviter les waypoints.
+% SY28 Project - Version complète avec Smooth Navigation, Obstacles et Reconfiguration
 
 %% Experiment Constants
 iterations = 3000;
@@ -45,7 +44,14 @@ repulsion_gain = 0.05;
 %% Tools
 si_to_uni_dyn = create_si_to_uni_dynamics('LinearVelocityGain', 0.8);
 uni_barrier_cert = create_uni_barrier_certificate_with_boundary();
-leader_controller = create_si_position_controller('XVelocityGain', 0.8, 'YVelocityGain', 0.8, 'VelocityMagnitudeLimit', 0.15);
+
+% Smooth waypoint controller based on Vilca et al. (2015)
+smooth_leader_controller = create_smooth_waypoint_controller(...
+    'LinearVelocityGain', 0.5, ...
+    'PositionError', 0.2, ...
+    'LookAheadGain', 0.6, ...
+    'MinimumVelocity', 0.08, ...
+    'VelocityMagnitudeLimit', 0.15);
 
 waypoints = [-0.9 0.5; 0.9 0.5; 0.9 -0.5; -0.9 -0.5]';
 close_enough = 0.2; 
@@ -100,12 +106,13 @@ for t = 1:iterations
         leader_label.String = 'Leader (DIAMOND)';
     end
 
-    %% 2. COMMANDE LEADER (Q1)
+    %% 2. COMMANDE LEADER - Smooth Navigation (Q1)
+    % Use smooth controller with full pose (x, y, theta) and look-ahead
+    dxi(:, 1) = smooth_leader_controller(x(:, 1), waypoints, state);
+
     waypoint = waypoints(:, state);
-    dxi(:, 1) = leader_controller(x(1:2, 1), waypoint);
-    
     if(norm(x(1:2, 1) - waypoint) < close_enough)
-        state = mod(state, 4) + 1; 
+        state = mod(state, 4) + 1;
     end
     
     %% 3. COMMANDE FOLLOWERS (Q2)
