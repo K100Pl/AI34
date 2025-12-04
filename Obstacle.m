@@ -1,42 +1,55 @@
 % SY28 Project - Version complète avec Smooth Navigation, Obstacles et Reconfiguration
+% Q1: Smooth navigation (Vilca 2015)
+% Q2: Formation diamant rigide avec 5 robots (1 leader + 4 followers)
+% Q3: Évitement d'obstacles (champ potentiel)
+% Q4: Reconfiguration diamant <-> platoon
 
 %% Experiment Constants
 iterations = 3000;
 
 %% Set up the Robotarium object
-N = 4;
-initial_positions = generate_initial_conditions(N, 'Width', 1.2, 'Height', 0.8, 'Spacing', 0.4);
+N = 5;  % 1 leader + 4 followers (Q2 requirement)
+initial_positions = generate_initial_conditions(N, 'Width', 1.5, 'Height', 1.0, 'Spacing', 0.3);
 r = Robotarium('NumberOfRobots', N, 'ShowFigure', true, 'InitialConditions', initial_positions);
 
 %% Topologie Rigide (Diamant) - Q2
+% 7 edges = 2N-3 pour N=5 -> Minimalement RIGIDE
+
 L = zeros(N, N);
-L(2, 2) = 1; L(2, 1) = -1;
-L(3, 3) = 1; L(3, 1) = -1;
-L(4, 4) = 2; L(4, 2) = -1; L(4, 3) = -1; 
+% F1(2) regarde Leader(1) et F2(3)
+L(2, 2) = 2; L(2, 1) = -1; L(2, 3) = -1;
+% F2(3) regarde Leader(1) et F1(2)
+L(3, 3) = 2; L(3, 1) = -1; L(3, 2) = -1;
+% F3(4) regarde Leader(1), F1(2), F2(3)
+L(4, 4) = 3; L(4, 1) = -1; L(4, 2) = -1; L(4, 3) = -1;
+% F4(5) regarde F3(4)
+L(5, 5) = 1; L(5, 4) = -1;
 
 dxi = zeros(2, N);
 state = 1;
 
-formation_control_gain = 3; 
+formation_control_gain = 4;  % Augmenté pour 5 robots
 
-% Offsets Diamant
-h_diamond = [ 0,    0;      
-             -0.3, -0.3;    
-              0.3, -0.3;    
-              0,   -0.6];   
+% Offsets Diamant (5 robots) - formation plus compacte
+h_diamond = [ 0,      0;       % Leader
+             -0.20,  -0.20;    % F1 (gauche-haut)
+              0.20,  -0.20;    % F2 (droite-haut)
+              0,     -0.40;    % F3 (centre)
+              0,     -0.60];   % F4 (queue)
 
-% Offsets Platoon (Q4)
-h_platoon = [ 0,    0;
-              0,   -0.35;
-              0,   -0.7;
-              0,   -1.05];
+% Offsets Platoon (5 robots) - Q4 - plus compact pour rester dans les limites
+h_platoon = [ 0,      0;       % Leader
+              0,     -0.22;    % F1
+              0,     -0.44;    % F2
+              0,     -0.66;    % F3
+              0,     -0.88];   % F4 (total: 0.88m au lieu de 1.12m)
               
 current_offsets = h_diamond; 
 
-% --- PARAMÈTRES D'OBSTACLES AJUSTÉS ---
-% WP1: (-0.9, 0.5), WP2: (0.9, 0.5), WP3: (0.9, -0.5), WP4: (-0.9, -0.5)
-% O1: Central (0, 0), O2: Déplacé à (-0.3, 0.0) pour éviter les coins
-obstacles = [0.0, 0.0; -0.3, 0.5]; 
+% --- OBSTACLES ---
+% Positionnés loin du spawn (centre) mais sur le chemin entre waypoints
+obstacles = [-0.5, 0.0;   % Côté gauche, entre WP1/WP4
+              0.5, 0.0];  % Côté droit, entre WP2/WP3 
 detect_radius = 0.6;    
 safe_radius = 0.25;     
 repulsion_gain = 0.05;  
@@ -57,7 +70,7 @@ waypoints = [-0.9 0.5; 0.9 0.5; 0.9 -0.5; -0.9 -0.5]';
 close_enough = 0.2; 
 
 %% Plotting Setup
-CM = ['k','b','r','g'];
+CM = ['k','b','r','g','m'];  % 5 couleurs pour 5 robots
 marker_size_goal = determine_marker_size(r, 0.20);
 font_size = determine_font_size(r, 0.05);
 line_width = 3;
@@ -82,9 +95,9 @@ for j = 1:N-1
     follower_labels{j} = text(500, 500, sprintf('F%d', j), 'FontSize', font_size, 'FontWeight', 'bold');
 end
 
-%% Data Saving Setup (Identique)
-robot_distance = zeros(5,iterations); 
-goal_distance = []; 
+%% Data Saving Setup
+robot_distance = zeros(N+1, iterations);  % N distances + timestamp
+goal_distance = [];
 start_time = tic;
 
 dxi(:, 1) = [0.01; 0.01];
@@ -112,7 +125,7 @@ for t = 1:iterations
 
     waypoint = waypoints(:, state);
     if(norm(x(1:2, 1) - waypoint) < close_enough)
-        state = mod(state, 4) + 1;
+        state = mod(state, size(waypoints, 2)) + 1;
     end
     
     %% 3. COMMANDE FOLLOWERS (Q2)
@@ -168,9 +181,11 @@ for t = 1:iterations
     end
     leader_label.Position = x(1:2, 1) + [-0.1;0.1];
     
-    % Data Saving
-    robot_distance(1,t) = norm([x(1:2,1) - x(1:2,2)],2);
-    robot_distance(5,t) = toc(start_time);
+    % Data Saving - distances entre robots consécutifs
+    for d = 1:N-1
+        robot_distance(d,t) = norm(x(1:2,d) - x(1:2,d+1), 2);
+    end
+    robot_distance(N+1,t) = toc(start_time);  % Timestamp
     if(norm(x(1:2, 1) - waypoint) < close_enough)
         goal_distance = [goal_distance [norm(x(1:2, 1) - waypoint);toc(start_time)]];
     end
