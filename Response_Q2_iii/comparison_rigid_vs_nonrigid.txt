@@ -1,0 +1,56 @@
+Q2.iii - Comparaison Rigide vs Non-Rigide
+
+Objectif: Montrer l'importance de la topologie rigide pour maintenir la forme.
+
+
+TOPOLOGIES TESTEES
+
+1. Rigide (Obstacle.m)
+   - 7 edges dans le Laplacien (2N-3 pour N=5)
+   - Chaque follower observe 1 a 3 voisins
+
+2. Non-Rigide (Obstacle_NonRigid.m)
+   - 4 edges, topologie en chaine
+   - Chaque follower observe seulement 1 voisin
+
+
+METRIQUE
+
+E(t) = somme de (d_actual - d_desired)^2 sur les 7 edges du diamant
+Les deux topologies sont mesurees sur les memes 7 edges.
+
+
+RESULTATS (3000 iterations)
+
+                  RIGIDE     NON-RIGIDE
+Mean E(t)         0.587      0.237
+Std E(t)          1.103      0.138
+Max E(t)          4.575      0.352
+RMSE              0.29 m     0.18 m
+Erreur finale     0.281      0.351
+
+Le non-rigide a de meilleures metriques dynamiques mais le rigide
+a une meilleure erreur finale.
+
+
+ANALYSE
+
+Le Max E(t) = 4.57 du rigide correspond aux pics pendant la
+reconfiguration diamant/platoon. Les 7 contraintes entrent en
+conflit pendant les transitions.
+
+Le non-rigide est plus fluide car il a moins de contraintes,
+mais il ne garantit pas que la forme finale soit correcte.
+
+
+CONCLUSION
+
+La rigidite (7 edges = 2N-3) est necessaire pour garantir le
+maintien de la forme geometrique. Le non-rigide peut sembler
+meilleur en dynamique mais ne converge pas aussi bien vers
+la forme desiree.
+
+
+FICHIERS
+- Obstacle.m : version rigide
+- Obstacle_NonRigid.m : version chaine (non-rigide)
