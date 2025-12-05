@@ -1,0 +1,90 @@
+II.ii - Odometrie Bruitee
+
+Objectif: Simuler le bruit d'odometrie et discuter comment l'incertitude
+de pose de chaque robot evolue avec le temps.
+
+
+IMPLEMENTATION
+
+Fichier: Obstacle_NoisyOdometry.m
+
+Principe:
+- Position initiale connue parfaitement (x_estimated = x_real)
+- Integration des commandes de vitesse AVEC bruit gaussien
+- Le controle utilise x_estimated au lieu de x_real
+- Erreur calculee: ||x_estimated - x_real||
+
+Modele de bruit:
+- v_noisy = v + sigma_v * randn()
+- omega_noisy = omega + sigma_omega * randn()
+- sigma_v = 0.01 m/s (bruit vitesse lineaire)
+- sigma_omega = 0.02 rad/s (bruit vitesse angulaire)
+
+
+RESULTATS
+
+Erreur odometrie par robot (moyenne sur 3000 iterations):
+- Robot 1: 0.0238 m
+- Robot 2: 0.0211 m
+- Robot 3: 0.0276 m
+- Robot 4: 0.0251 m
+- Robot 5: 0.0166 m
+
+Statistiques erreur totale:
+- Mean:     0.114 m
+- Std:      0.045 m
+- Max:      0.175 m
+- Finale:   0.175 m
+
+
+EVOLUTION DE L'ERREUR DANS LE TEMPS (DRIFT)
+
+t           Erreur totale
+500         0.061 m
+1000        0.110 m
+1500        0.133 m
+2000        0.150 m
+2500        0.153 m
+3000        0.175 m
+
+L'erreur AUGMENTE avec le temps: c'est le drift caracteristique
+de l'odometrie. Sans correction externe, l'erreur s'accumule.
+
+
+COMPARAISON AVEC II.i (ODOMETRIE PARFAITE)
+
+                    II.i (parfait)    II.ii (bruit)
+Erreur moyenne      0.000 m           0.114 m
+Erreur finale       0.0001 m          0.175 m
+Comportement        Stable            Drift croissant
+
+
+ANALYSE
+
+Origine du drift:
+- A chaque iteration, on integre des vitesses bruitees
+- Le bruit s'accumule car on additionne sans jamais corriger
+- position(t+1) = position(t) + vitesse_bruitee * dt
+- Erreur(t) = somme de tous les bruits precedents
+
+Impact sur le controle:
+- Le robot "pense" etre a x_estimated
+- Mais il est vraiment a x_real
+- Ses commandes sont calculees pour x_estimated
+- Donc il va au mauvais endroit
+- Plus le drift augmente, plus le controle devient imprecis
+
+
+CONCLUSION
+
+- Le bruit d'odometrie cause un drift qui augmente avec le temps
+- Sans correction externe, l'erreur devient inacceptable
+- Erreur finale ~17.5 cm vs ~0.01 cm pour odometrie parfaite
+- Necessite des mesures absolues (landmarks, GPS) pour corriger
+- C'est l'objet de II.iii: correction par observation de landmarks
+
+
+FICHIERS
+
+- Obstacle_NoisyOdometry.m : script principal
+- OdometryError_Noisy.mat : donnees sauvegardees
