@@ -1,0 +1,105 @@
+II.iii - Observation de Landmarks
+
+Objectif: Ajouter des landmarks fixes a la simulation et faire estimer
+a chaque robot sa pose en utilisant l'odometrie et des observations
+parfaites des positions des landmarks.
+
+
+IMPLEMENTATION
+
+Fichier: Obstacle_Landmarks.m
+
+Principe:
+- Odometrie bruitee (comme II.ii)
+- Landmarks = points fixes de position connue
+- Quand un robot est proche d'un landmark, il l'observe
+- Observation parfaite -> correction de x_estimated vers x_real
+- Le drift est remis a zero periodiquement
+
+Code de correction:
+  if distance_to_landmark < observation_radius
+      x_estimated = x_real;  % Reset du drift
+  end
+
+
+TESTS REALISES
+
+Test 1: 4 landmarks, rayon 0.30m
+- Landmarks aux 4 coins proches des waypoints
+- Total corrections: 3998
+- Mean erreur: 0.041 m
+- Erreur finale: 0.067 m
+
+Test 2: 2 landmarks, rayon 0.25m (configuration finale)
+- Landmarks aux coins opposes (WP1 et WP3)
+- Total corrections: 3107
+- Mean erreur: 0.045 m
+- Erreur finale: 0.086 m
+
+
+RESULTATS (configuration finale: 2 landmarks, rayon 0.25m)
+
+Corrections par robot:
+- Robot 1: 585 corrections
+- Robot 2: 440 corrections
+- Robot 3: 1167 corrections
+- Robot 4: 802 corrections
+- Robot 5: 113 corrections
+- Total:   3107 corrections
+
+Erreur odometrie par robot (moyenne):
+- Robot 1: 0.0066 m
+- Robot 2: 0.0102 m
+- Robot 3: 0.0082 m
+- Robot 4: 0.0073 m
+- Robot 5: 0.0124 m
+
+Statistiques erreur totale:
+- Mean:     0.045 m
+- Std:      0.019 m
+- Max:      0.089 m
+- Finale:   0.086 m
+
+
+COMPARAISON II.i / II.ii / II.iii
+
+                        II.i        II.ii       II.iii
+                        (parfait)   (bruit)     (landmarks)
+Mean erreur             0.000 m     0.114 m     0.045 m
+Erreur finale           0.0001 m    0.175 m     0.086 m
+Comportement            Stable      Drift       Oscillations
+
+Amelioration II.iii vs II.ii:
+- Mean erreur: -61% (0.114 -> 0.045)
+- Erreur finale: -51% (0.175 -> 0.086)
+
+
+ANALYSE
+
+Evolution de l'erreur:
+- II.ii: drift croissant (0.06 -> 0.11 -> 0.15 -> 0.175)
+- II.iii: oscillations (monte entre landmarks, reset au passage)
+
+Impact du nombre de landmarks:
+- Plus de landmarks = plus de corrections = erreur plus faible
+- Moins de landmarks = moins de corrections = erreur plus elevee
+- Compromis entre precision et frequence de correction
+
+Robots avec plus de corrections:
+- Robot 3 (1167): passe souvent pres des landmarks
+- Robot 5 (113): trajectoire eloignee des landmarks
+
+
+CONCLUSION
+
+- Les landmarks permettent de limiter le drift odometrique
+- L'erreur n'accumule plus indefiniment grace aux corrections
+- Amelioration de ~60% par rapport a l'odometrie bruitee seule
+- Le nombre et la position des landmarks impactent la precision
+- Solution realiste pour la localisation en environnement connu
+
+
+FICHIERS
+
+- Obstacle_Landmarks.m : script principal
+- OdometryError_Landmarks.mat : donnees sauvegardees
