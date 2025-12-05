@@ -1,11 +1,12 @@
-% SY28 Project - Version complète avec Smooth Navigation, Obstacles et Reconfiguration
-% Q1: Smooth navigation (Vilca 2015)
-% Q2: Formation diamant rigide avec 5 robots (1 leader + 4 followers)
-% Q3: Évitement d'obstacles (champ potentiel)
-% Q4: Reconfiguration diamant <-> platoon
+% SY28 Project - Q5: Impact de la localisation bruitee
+% Base: Obstacle.m avec ajout de bruit gaussien sur les positions
+% Objectif: Montrer l'importance d'une localisation precise
 
 %% Experiment Constants
 iterations = 3000;
+
+%% PARAMETRES DE BRUIT LOCALISATION (Q5)
+noise_std = 0.05;  % Ecart-type du bruit en metres (5cm - realiste GPS/vision)
 
 %% Set up the Robotarium object
 N = 5;  % 1 leader + 4 followers (Q2 requirement)
@@ -113,11 +114,16 @@ r.step();
 
 %% BOUCLE PRINCIPALE
 for t = 1:iterations
-    
-    x = r.get_poses();
-    
-    %% 1. RECONFIGURATION (Q4)
-    dist_to_obs = min(sqrt(sum((x(1:2,1) - obstacles').^2)));
+
+    x = r.get_poses();  % Positions REELLES
+
+    %% BRUIT DE LOCALISATION (Q5)
+    % Les robots "pensent" etre a x_noisy mais sont vraiment a x
+    x_noisy = x;
+    x_noisy(1:2, :) = x(1:2, :) + noise_std * randn(2, N);
+
+    %% 1. RECONFIGURATION (Q4) - utilise positions bruitees
+    dist_to_obs = min(sqrt(sum((x_noisy(1:2,1) - obstacles').^2)));
     
     if dist_to_obs < detect_radius
         current_offsets = h_platoon; 
@@ -127,32 +133,31 @@ for t = 1:iterations
         leader_label.String = 'Leader (DIAMOND)';
     end
 
-    %% 2. COMMANDE LEADER - Smooth Navigation (Q1)
-    % Use smooth controller with full pose (x, y, theta) and look-ahead
-    dxi(:, 1) = smooth_leader_controller(x(:, 1), waypoints, state);
+    %% 2. COMMANDE LEADER - Smooth Navigation (Q1) - utilise positions bruitees
+    dxi(:, 1) = smooth_leader_controller(x_noisy(:, 1), waypoints, state);
 
     waypoint = waypoints(:, state);
-    if(norm(x(1:2, 1) - waypoint) < close_enough)
+    if(norm(x_noisy(1:2, 1) - waypoint) < close_enough)
         state = mod(state, size(waypoints, 2)) + 1;
     end
-    
-    %% 3. COMMANDE FOLLOWERS (Q2)
+
+    %% 3. COMMANDE FOLLOWERS (Q2) - utilise positions bruitees
     for i = 2:N
         dxi(:, i) = [0 ; 0];
         neighbors = find(L(i,:) == -1);
-        
+
         for j = neighbors
-            pos_error = x(1:2, j) - x(1:2, i);
+            pos_error = x_noisy(1:2, j) - x_noisy(1:2, i);  % BRUIT
             offset_error = current_offsets(j,:)' - current_offsets(i,:)';
             dxi(:, i) = dxi(:, i) + formation_control_gain * (pos_error - offset_error);
         end
-        dxi(:, i) = dxi(:, i) + dxi(:, 1); 
+        dxi(:, i) = dxi(:, i) + dxi(:, 1);
     end
-    
-    %% 4. ÉVITEMENT D'OBSTACLES (Q3)
+
+    %% 4. EVITEMENT D'OBSTACLES (Q3) - utilise positions bruitees
     for i = 1:N
         for k = 1:size(obstacles, 1)
-            vect = x(1:2, i) - obstacles(k,:)';
+            vect = x_noisy(1:2, i) - obstacles(k,:)';  % BRUIT
             dist = norm(vect);
             if dist < safe_radius
                  dxi(:, i) = dxi(:, i) + repulsion_gain * (vect / dist^3);
@@ -216,47 +221,24 @@ for t = 1:iterations
     r.step();
 end
 
-%% Sauvegarde des données
-save('DistanceData.mat', 'robot_distance');
-save('GoalData.mat', 'goal_distance');
-save('FormationError.mat', 'formation_error', 'edges');
+%% Sauvegarde des donnees
+save('FormationError_NoisyLoc.mat', 'formation_error', 'edges', 'noise_std');
 
-%% Affichage des statistiques de formation (Q2.ii)
-fprintf('\n=== MÉTRIQUE DE FORMATION - RIGIDE (Q2.iii) ===\n');
-fprintf('Topologie: DIAMANT RIGIDE (controle 7 edges, mesure 7 edges)\n');
-fprintf('E(t) = Σ(d_actual - d_desired)² sur 7 edges de la forme\n\n');
+%% Affichage des statistiques de formation (Q5)
+fprintf('\n=== Q5: LOCALISATION BRUITEE ===\n');
+fprintf('Bruit gaussien: sigma = %.3f m (%.1f cm)\n', noise_std, noise_std*100);
+fprintf('E(t) = Σ(d_actual - d_desired)² sur 7 edges\n\n');
 
 % Ignorer les 200 premières itérations (transitoire)
 steady_state = formation_error(200:end);
 
-fprintf('Statistiques sur 7 edges [1-2, 1-3, 1-4, 2-3, 2-4, 3-4, 4-5]:\n');
+fprintf('Statistiques:\n');
 fprintf('  Mean E(t):     %.6f\n', mean(steady_state));
 fprintf('  Std E(t):      %.6f\n', std(steady_state));
 fprintf('  Max E(t):      %.6f\n', max(steady_state));
 fprintf('  Min E(t):      %.6f\n', min(steady_state));
 fprintf('  RMSE:          %.4f m\n', sqrt(mean(steady_state)/num_edges));
 fprintf('  Erreur finale: %.6f\n', formation_error(end));
-
-%% Verification de FORME (pour comparaison avec non-rigide)
-fprintf('\n=== VERIFICATION DE FORME (memes distances que non-rigide) ===\n');
-x_final = r.get_poses();
-
-% Distances desirees dans le diamant
-d_13_desired = norm(h_diamond(1,:) - h_diamond(3,:));  % Leader-F2
-d_14_desired = norm(h_diamond(1,:) - h_diamond(4,:));  % Leader-F3
-d_24_desired = norm(h_diamond(2,:) - h_diamond(4,:));  % F1-F3
-
-% Distances actuelles
-d_13_actual = norm(x_final(1:2,1) - x_final(1:2,3));
-d_14_actual = norm(x_final(1:2,1) - x_final(1:2,4));
-d_24_actual = norm(x_final(1:2,2) - x_final(1:2,4));
-
-fprintf('Distance Leader-F2 (1-3): desire=%.3f, actuel=%.3f, erreur=%.3f m\n', d_13_desired, d_13_actual, abs(d_13_actual-d_13_desired));
-fprintf('Distance Leader-F3 (1-4): desire=%.3f, actuel=%.3f, erreur=%.3f m\n', d_14_desired, d_14_actual, abs(d_14_actual-d_14_desired));
-fprintf('Distance F1-F3 (2-4):     desire=%.3f, actuel=%.3f, erreur=%.3f m\n', d_24_desired, d_24_actual, abs(d_24_actual-d_24_desired));
-
-total_shape_error = (d_13_actual-d_13_desired)^2 + (d_14_actual-d_14_desired)^2 + (d_24_actual-d_24_desired)^2;
-fprintf('\nErreur de FORME (3 distances de reference): %.6f\n', total_shape_error);
 
 r.debug();
 

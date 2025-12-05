@@ -1,11 +1,13 @@
-% SY28 Project - Version complète avec Smooth Navigation, Obstacles et Reconfiguration
-% Q1: Smooth navigation (Vilca 2015)
-% Q2: Formation diamant rigide avec 5 robots (1 leader + 4 followers)
-% Q3: Évitement d'obstacles (champ potentiel)
-% Q4: Reconfiguration diamant <-> platoon
+% SY28 Project - Q5: Impact de la communication degradee
+% Base: Obstacle.m avec ajout de delais et pertes de paquets
+% Objectif: Montrer l'importance d'une communication fiable
 
 %% Experiment Constants
 iterations = 3000;
+
+%% PARAMETRES DE COMMUNICATION (Q5)
+comm_delay = 5;        % Delai en nombre de timesteps
+packet_loss = 0.10;    % Taux de perte de paquets (10%)
 
 %% Set up the Robotarium object
 N = 5;  % 1 leader + 4 followers (Q2 requirement)
@@ -111,13 +113,39 @@ start_time = tic;
 dxi(:, 1) = [0.01; 0.01];
 r.step();
 
+%% Buffer pour simuler le delai de communication
+x_buffer = zeros(3, N, comm_delay);  % Stocke les positions des derniers timesteps
+x_received = zeros(3, N);            % Positions "recues" par les robots
+
 %% BOUCLE PRINCIPALE
 for t = 1:iterations
-    
-    x = r.get_poses();
-    
-    %% 1. RECONFIGURATION (Q4)
-    dist_to_obs = min(sqrt(sum((x(1:2,1) - obstacles').^2)));
+
+    x = r.get_poses();  % Positions REELLES
+
+    %% SIMULATION COMMUNICATION DEGRADEE (Q5)
+    % Mise a jour du buffer (decalage)
+    x_buffer(:, :, 2:end) = x_buffer(:, :, 1:end-1);
+    x_buffer(:, :, 1) = x;
+
+    % Positions recues = positions avec delai
+    if t > comm_delay
+        x_received = x_buffer(:, :, comm_delay);
+    else
+        x_received = x;  % Pas de delai au debut
+    end
+
+    % Simulation perte de paquets (certaines positions non mises a jour)
+    for i = 1:N
+        if rand() < packet_loss
+            % Paquet perdu: garde l'ancienne position
+            % (x_received reste inchange pour ce robot)
+        else
+            x_received(:, i) = x_buffer(:, i, min(t, comm_delay));
+        end
+    end
+
+    %% 1. RECONFIGURATION (Q4) - utilise positions recues
+    dist_to_obs = min(sqrt(sum((x_received(1:2,1) - obstacles').^2)));
     
     if dist_to_obs < detect_radius
         current_offsets = h_platoon; 
@@ -127,32 +155,31 @@ for t = 1:iterations
         leader_label.String = 'Leader (DIAMOND)';
     end
 
-    %% 2. COMMANDE LEADER - Smooth Navigation (Q1)
-    % Use smooth controller with full pose (x, y, theta) and look-ahead
-    dxi(:, 1) = smooth_leader_controller(x(:, 1), waypoints, state);
+    %% 2. COMMANDE LEADER - utilise positions recues
+    dxi(:, 1) = smooth_leader_controller(x_received(:, 1), waypoints, state);
 
     waypoint = waypoints(:, state);
-    if(norm(x(1:2, 1) - waypoint) < close_enough)
+    if(norm(x_received(1:2, 1) - waypoint) < close_enough)
         state = mod(state, size(waypoints, 2)) + 1;
     end
-    
-    %% 3. COMMANDE FOLLOWERS (Q2)
+
+    %% 3. COMMANDE FOLLOWERS - utilise positions recues (avec delai/pertes)
     for i = 2:N
         dxi(:, i) = [0 ; 0];
         neighbors = find(L(i,:) == -1);
-        
+
         for j = neighbors
-            pos_error = x(1:2, j) - x(1:2, i);
+            pos_error = x_received(1:2, j) - x_received(1:2, i);  % COMM DEGRADEE
             offset_error = current_offsets(j,:)' - current_offsets(i,:)';
             dxi(:, i) = dxi(:, i) + formation_control_gain * (pos_error - offset_error);
         end
-        dxi(:, i) = dxi(:, i) + dxi(:, 1); 
+        dxi(:, i) = dxi(:, i) + dxi(:, 1);
     end
-    
-    %% 4. ÉVITEMENT D'OBSTACLES (Q3)
+
+    %% 4. EVITEMENT D'OBSTACLES - utilise positions recues
     for i = 1:N
         for k = 1:size(obstacles, 1)
-            vect = x(1:2, i) - obstacles(k,:)';
+            vect = x_received(1:2, i) - obstacles(k,:)';  % COMM DEGRADEE
             dist = norm(vect);
             if dist < safe_radius
                  dxi(:, i) = dxi(:, i) + repulsion_gain * (vect / dist^3);
@@ -216,47 +243,24 @@ for t = 1:iterations
     r.step();
 end
 
-%% Sauvegarde des données
-save('DistanceData.mat', 'robot_distance');
-save('GoalData.mat', 'goal_distance');
-save('FormationError.mat', 'formation_error', 'edges');
+%% Sauvegarde des donnees
+save('FormationError_NoisyComm.mat', 'formation_error', 'edges', 'comm_delay', 'packet_loss');
 
-%% Affichage des statistiques de formation (Q2.ii)
-fprintf('\n=== MÉTRIQUE DE FORMATION - RIGIDE (Q2.iii) ===\n');
-fprintf('Topologie: DIAMANT RIGIDE (controle 7 edges, mesure 7 edges)\n');
-fprintf('E(t) = Σ(d_actual - d_desired)² sur 7 edges de la forme\n\n');
+%% Affichage des statistiques de formation (Q5)
+fprintf('\n=== Q5: COMMUNICATION DEGRADEE ===\n');
+fprintf('Delai: %d timesteps, Perte paquets: %.0f%%\n', comm_delay, packet_loss*100);
+fprintf('E(t) = Σ(d_actual - d_desired)² sur 7 edges\n\n');
 
-% Ignorer les 200 premières itérations (transitoire)
+% Ignorer les 200 premieres iterations (transitoire)
 steady_state = formation_error(200:end);
 
-fprintf('Statistiques sur 7 edges [1-2, 1-3, 1-4, 2-3, 2-4, 3-4, 4-5]:\n');
+fprintf('Statistiques:\n');
 fprintf('  Mean E(t):     %.6f\n', mean(steady_state));
 fprintf('  Std E(t):      %.6f\n', std(steady_state));
 fprintf('  Max E(t):      %.6f\n', max(steady_state));
 fprintf('  Min E(t):      %.6f\n', min(steady_state));
 fprintf('  RMSE:          %.4f m\n', sqrt(mean(steady_state)/num_edges));
 fprintf('  Erreur finale: %.6f\n', formation_error(end));
-
-%% Verification de FORME (pour comparaison avec non-rigide)
-fprintf('\n=== VERIFICATION DE FORME (memes distances que non-rigide) ===\n');
-x_final = r.get_poses();
-
-% Distances desirees dans le diamant
-d_13_desired = norm(h_diamond(1,:) - h_diamond(3,:));  % Leader-F2
-d_14_desired = norm(h_diamond(1,:) - h_diamond(4,:));  % Leader-F3
-d_24_desired = norm(h_diamond(2,:) - h_diamond(4,:));  % F1-F3
-
-% Distances actuelles
-d_13_actual = norm(x_final(1:2,1) - x_final(1:2,3));
-d_14_actual = norm(x_final(1:2,1) - x_final(1:2,4));
-d_24_actual = norm(x_final(1:2,2) - x_final(1:2,4));
-
-fprintf('Distance Leader-F2 (1-3): desire=%.3f, actuel=%.3f, erreur=%.3f m\n', d_13_desired, d_13_actual, abs(d_13_actual-d_13_desired));
-fprintf('Distance Leader-F3 (1-4): desire=%.3f, actuel=%.3f, erreur=%.3f m\n', d_14_desired, d_14_actual, abs(d_14_actual-d_14_desired));
-fprintf('Distance F1-F3 (2-4):     desire=%.3f, actuel=%.3f, erreur=%.3f m\n', d_24_desired, d_24_actual, abs(d_24_actual-d_24_desired));
-
-total_shape_error = (d_13_actual-d_13_desired)^2 + (d_14_actual-d_14_desired)^2 + (d_24_actual-d_24_desired)^2;
-fprintf('\nErreur de FORME (3 distances de reference): %.6f\n', total_shape_error);
 
 r.debug();
 

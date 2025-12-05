@@ -1,0 +1,106 @@
+Q5 - Importance de la localisation et communication
+
+Objectif: Evaluer l'impact de la precision de localisation et de la
+fiabilite de communication sur le maintien de la formation.
+
+
+SCENARIOS TESTES
+
+1. Baseline (Obstacle.m)
+   - Localisation parfaite (positions exactes)
+   - Communication instantanee et fiable
+   - Reference pour comparaison
+
+2. Localisation bruitee (Obstacle_NoisyLocalization.m)
+   - Bruit gaussien sigma = 5cm sur positions x,y
+   - Simule erreur GPS/vision
+   - Les robots "pensent" etre ailleurs
+
+3. Communication degradee (Obstacle_NoisyCommunication.m)
+   - Delai de 5 timesteps sur positions recues
+   - Perte de paquets 10%
+   - Simule reseau Wi-Fi instable
+
+
+PARAMETRES
+
+- N = 5 robots (1 leader + 4 followers)
+- Formation diamant rigide (7 edges)
+- 3000 iterations, steady-state apres t=200
+- Meme seed (rng(42)) pour reproductibilite
+
+
+METRIQUE
+
+E(t) = somme de (d_actual - d_desired)^2 sur les 7 edges du diamant
+Mean E(t) = moyenne sur toute la simulation (metrique principale)
+
+
+RESULTATS (run finale)
+
+                      BASELINE    NOISY_LOC    NOISY_COMM
+Mean E(t)             0.4606      0.2109       0.6492
+Std E(t)              0.5218      0.1264       0.8986
+Max E(t)              1.9708      0.6708       3.9528
+Min E(t)              0.0064      0.0096       0.0395
+RMSE                  0.257 m     0.174 m      0.305 m
+
+Note: On utilise Mean E(t) comme metrique principale car elle
+moyenne sur toute la simulation. L'erreur finale (dernier E(t))
+depend de ou le robot est a t=3000 et n'est pas representative.
+
+
+VARIATION DU BRUIT DE LOCALISATION
+
+Tests avec differents niveaux de bruit:
+
+Bruit       Mean E(t)    vs Baseline
+0 cm        0.461        reference
+5 cm        0.211        -54%
+10 cm       0.169        -63%
+25 cm       0.189        -59%
+1 m         0.273        -41%
+3 m         0.671        +46%
+
+Seuil de degradation entre 1m et 3m.
+Pour bruit realiste (<10cm), systeme tres robuste.
+
+
+ANALYSE
+
+Communication degradee:
+- Mean E(t) augmente de 41% (0.461 -> 0.649)
+- Max E(t) double (1.97 -> 3.95)
+- Le delai cause des corrections tardives
+- Les pertes causent des sauts de commande
+- Instabilite pendant reconfiguration diamant/platoon
+
+Localisation bruitee:
+- Mean E(t) diminue de 54% (0.461 -> 0.211)
+- Resultat contre-intuitif: le bruit ameliore!
+- Bruit zero-mean se moyenne sur le temps
+- Agit comme damping/regularisateur
+- Empeche oscillations dues aux corrections agressives
+- Barriere de securite lisse les commandes
+
+
+CONCLUSION
+
+Communication fiable = CRITIQUE
+- Delais degradent fortement la formation (+41% Mean E(t))
+- Pertes de paquets ajoutent instabilite
+- Max E(t) double = pics d'erreur importants
+- Priorite en pratique: reseau temps-reel
+
+Localisation precise = MOINS CRITIQUE
+- Robuste jusqu'a 1m de bruit
+- Bruit realiste (5-10cm) pas un probleme
+- Moyennage temporel compense le bruit
+
+En pratique: investir dans communication fiable plutot que
+capteurs ultra-precis.
+
+
+FICHIERS
+- Obstacle_NoisyLocalization.m : bruit gaussien 5cm
+- Obstacle_NoisyCommunication.m : delai 5 steps + 10% perte
