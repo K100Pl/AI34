@@ -1,0 +1,62 @@
+II.i - Odometrie Parfaite
+
+Objectif: Les robots connaissent leur pose initiale parfaitement et
+evoluent leur propre pose en utilisant un odometre parfait (sans bruit).
+
+
+IMPLEMENTATION
+
+Fichier: Obstacle_PerfectOdometry.m
+
+Principe:
+- Position initiale x_estimated = x_real (connue parfaitement)
+- A chaque iteration, integration des commandes de vitesse
+- Le controle utilise x_estimated au lieu de x_real
+- Erreur calculee: ||x_estimated - x_real||
+
+Modele unicycle:
+- x = x + v * cos(theta) * dt
+- y = y + v * sin(theta) * dt
+- theta = theta + omega * dt
+- dt = 0.033s (timestep Robotarium ~30Hz)
+
+
+RESULTATS
+
+Erreur odometrie par robot (moyenne sur 3000 iterations):
+- Robot 1: 0.000000 m
+- Robot 2: 0.000000 m
+- Robot 3: 0.000000 m
+- Robot 4: 0.000000 m
+- Robot 5: 0.000000 m
+
+Statistiques erreur totale:
+- Mean:     0.000000 m
+- Std:      0.000000 m
+- Max:      0.000000 m
+- Finale:   0.0001 m
+
+
+ANALYSE
+
+- Avec odometrie parfaite (integration sans bruit), l'estimation
+  de pose est quasi-identique a la realite
+- La petite erreur finale (~0.1 mm) est due a l'erreur de
+  discretisation numerique
+- Formation maintenue correctement car controle base sur
+  estimation exacte
+
+
+CONCLUSION
+
+- Odometrie parfaite = estimation exacte de la pose
+- Erreur finale negligeable (~0.1 mm sur 3000 iterations)
+- Cette implementation sert de baseline pour comparer avec:
+  - II.ii: Odometrie bruitee
+  - II.iii: Correction par observation de landmarks
+
+
+FICHIERS
+
+- Obstacle_PerfectOdometry.m : script principal
+- OdometryError_Perfect.mat : donnees sauvegardees
