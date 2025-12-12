@@ -31,28 +31,34 @@ state = 1;
 
 formation_control_gain = 4;  % Augmenté pour 5 robots
 
-% Offsets Diamant (5 robots) - formation plus compacte
-h_diamond = [ 0,      0;       % Leader
-             -0.20,  -0.20;    % F1 (gauche-haut)
-              0.20,  -0.20;    % F2 (droite-haut)
-              0,     -0.40;    % F3 (centre)
-              0,     -0.60];   % F4 (queue)
+% Offsets Diamant (5 robots) - EN COORDONNÉES LOCALES (relatives au leader)
+% X positif = DEVANT le leader, X négatif = DERRIÈRE
+% Y positif = GAUCHE, Y négatif = DROITE
+h_diamond_local = [ 0,      0;       % Leader (origine)
+                   -0.20,   0.20;    % F1 (derrière-gauche)
+                   -0.20,  -0.20;    % F2 (derrière-droite)
+                   -0.40,   0;       % F3 (directement derrière)
+                   -0.60,   0];      % F4 (queue)
 
-% Offsets Platoon (5 robots) - Q4 - plus compact pour rester dans les limites
-h_platoon = [ 0,      0;       % Leader
-              0,     -0.22;    % F1
-              0,     -0.44;    % F2
-              0,     -0.66;    % F3
-              0,     -0.88];   % F4 (total: 0.88m au lieu de 1.12m)
-              
-current_offsets = h_diamond; 
+% Offsets Platoon (5 robots) - Q4 - EN COORDONNÉES LOCALES
+h_platoon_local = [ 0,      0;       % Leader
+                   -0.22,   0;       % F1 (derrière)
+                   -0.44,   0;       % F2 (derrière)
+                   -0.66,   0;       % F3 (derrière)
+                   -0.88,   0];      % F4 (derrière)
+
+current_offsets_local = h_diamond_local; 
 
 % --- OBSTACLES ---
-% Positionnés loin du spawn (centre) mais sur le chemin entre waypoints
-obstacles = [-0.5, 0.0;   % Côté gauche, entre WP1/WP4
-              0.5, 0.0];  % Côté droit, entre WP2/WP3 
-detect_radius = 0.6;    
-safe_radius = 0.25;     
+% Placés PILE sur les trajectoires entre waypoints
+%   WP1(-1.2,0.7) → WP2(1.2,0.7)  : trajectoire horizontale haut, y=0.7
+%   WP2(1.2,0.7)  → WP3(1.2,-0.7) : trajectoire verticale droite, x=1.2
+%   WP3(1.2,-0.7) → WP4(-1.2,-0.7): trajectoire horizontale bas, y=-0.7
+%   WP4(-1.2,-0.7)→ WP1(-1.2,0.7) : trajectoire verticale gauche, x=-1.2
+obstacles = [ 0.0,  0.7;   % Sur trajectoire WP1→WP2 (haut)
+              0.0, -0.7];  % Sur trajectoire WP3→WP4 (bas)
+detect_radius = 0.6;
+safe_radius = 0.25;
 repulsion_gain = 0.05;  
 
 %% Tools
@@ -61,13 +67,14 @@ uni_barrier_cert = create_uni_barrier_certificate_with_boundary();
 
 % Smooth waypoint controller based on Vilca et al. (2015)
 smooth_leader_controller = create_smooth_waypoint_controller(...
-    'LinearVelocityGain', 0.5, ...
+    'LinearVelocityGain', 0.30, ...
     'PositionError', 0.2, ...
     'LookAheadGain', 0.6, ...
-    'MinimumVelocity', 0.08, ...
-    'VelocityMagnitudeLimit', 0.15);
+    'MinimumVelocity', 0.04, ...
+    'VelocityMagnitudeLimit', 0.10);
 
-waypoints = [-0.9 0.5; 0.9 0.5; 0.9 -0.5; -0.9 -0.5]';
+% Waypoints agrandis (plus proches des bords du Robotarium)
+waypoints = [-1.2 0.7; 1.2 0.7; 1.2 -0.7; -1.2 -0.7]';
 close_enough = 0.2; 
 
 %% Plotting Setup
@@ -117,14 +124,29 @@ for t = 1:iterations
     x = r.get_poses();
     
     %% 1. RECONFIGURATION (Q4)
-    dist_to_obs = min(sqrt(sum((x(1:2,1) - obstacles').^2)));
-    
+    if ~isempty(obstacles)
+        dist_to_obs = min(sqrt(sum((x(1:2,1) - obstacles').^2)));
+    else
+        dist_to_obs = inf;  % Pas d'obstacles = distance infinie
+    end
+
     if dist_to_obs < detect_radius
-        current_offsets = h_platoon; 
+        current_offsets_local = h_platoon_local;
         leader_label.String = 'Leader (PLATOON)';
     else
-        current_offsets = h_diamond; 
+        current_offsets_local = h_diamond_local;
         leader_label.String = 'Leader (DIAMOND)';
+    end
+
+    %% 1b. ROTATION DES OFFSETS selon orientation du leader
+    % Transforme les offsets locaux (relatifs au leader) en coordonnées globales
+    theta_leader = x(3, 1);
+    R = [cos(theta_leader), -sin(theta_leader);
+         sin(theta_leader),  cos(theta_leader)];
+
+    current_offsets = zeros(N, 2);
+    for i = 1:N
+        current_offsets(i,:) = (R * current_offsets_local(i,:)')';
     end
 
     %% 2. COMMANDE LEADER - Smooth Navigation (Q1)
@@ -242,9 +264,9 @@ fprintf('\n=== VERIFICATION DE FORME (memes distances que non-rigide) ===\n');
 x_final = r.get_poses();
 
 % Distances desirees dans le diamant
-d_13_desired = norm(h_diamond(1,:) - h_diamond(3,:));  % Leader-F2
-d_14_desired = norm(h_diamond(1,:) - h_diamond(4,:));  % Leader-F3
-d_24_desired = norm(h_diamond(2,:) - h_diamond(4,:));  % F1-F3
+d_13_desired = norm(h_diamond_local(1,:) - h_diamond_local(3,:));  % Leader-F2
+d_14_desired = norm(h_diamond_local(1,:) - h_diamond_local(4,:));  % Leader-F3
+d_24_desired = norm(h_diamond_local(2,:) - h_diamond_local(4,:));  % F1-F3
 
 % Distances actuelles
 d_13_actual = norm(x_final(1:2,1) - x_final(1:2,3));
