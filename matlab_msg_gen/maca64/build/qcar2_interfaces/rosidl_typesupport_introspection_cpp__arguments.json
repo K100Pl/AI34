@@ -1,0 +1,21 @@
+{
+  "package_name": "qcar2_interfaces",
+  "output_dir": "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_typesupport_introspection_cpp/qcar2_interfaces",
+  "template_dir": "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_introspection_cpp/resource",
+  "idl_tuples": [
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_adapter/qcar2_interfaces:msg/BooleanLeds.idl",
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_adapter/qcar2_interfaces:msg/MotorCommands.idl"
+  ],
+  "target_dependencies": [
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/lib/rosidl_typesupport_introspection_cpp/rosidl_typesupport_introspection_cpp",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/lib/python3.9/site-packages/rosidl_typesupport_introspection_cpp/__init__.py",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_introspection_cpp/resource/idl__rosidl_typesupport_introspection_cpp.hpp.em",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_introspection_cpp/resource/idl__type_support.cpp.em",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_introspection_cpp/resource/msg__rosidl_typesupport_introspection_cpp.hpp.em",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_introspection_cpp/resource/msg__type_support.cpp.em",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_introspection_cpp/resource/srv__rosidl_typesupport_introspection_cpp.hpp.em",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_introspection_cpp/resource/srv__type_support.cpp.em",
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_adapter/qcar2_interfaces/msg/BooleanLeds.idl",
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_adapter/qcar2_interfaces/msg/MotorCommands.idl"
+  ]
+}

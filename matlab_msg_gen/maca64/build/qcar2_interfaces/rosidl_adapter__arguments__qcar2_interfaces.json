@@ -1,0 +1,7 @@
+{
+  "package_name": "qcar2_interfaces",
+  "non_idl_tuples": [
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/src/qcar2_interfaces:msg/BooleanLeds.msg",
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/src/qcar2_interfaces:msg/MotorCommands.msg"
+  ]
+}

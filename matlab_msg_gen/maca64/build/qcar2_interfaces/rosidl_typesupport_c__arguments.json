@@ -1,0 +1,19 @@
+{
+  "package_name": "qcar2_interfaces",
+  "output_dir": "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_typesupport_c/qcar2_interfaces",
+  "template_dir": "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_c/resource",
+  "idl_tuples": [
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_adapter/qcar2_interfaces:msg/BooleanLeds.idl",
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_adapter/qcar2_interfaces:msg/MotorCommands.idl"
+  ],
+  "target_dependencies": [
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/lib/rosidl_typesupport_c/rosidl_typesupport_c",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/lib/python3.9/site-packages/rosidl_typesupport_c/__init__.py",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_c/resource/action__type_support.c.em",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_c/resource/idl__type_support.cpp.em",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_c/resource/msg__type_support.cpp.em",
+    "/Applications/MATLAB_R2024b.app/sys/ros2/maca64/ros2/share/rosidl_typesupport_c/resource/srv__type_support.cpp.em",
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_adapter/qcar2_interfaces/msg/BooleanLeds.idl",
+    "/Users/cassanpierre-lo/Documents/qcar2_pkg/src/matlab_msg_gen/maca64/build/qcar2_interfaces/rosidl_adapter/qcar2_interfaces/msg/MotorCommands.idl"
+  ]
+}
