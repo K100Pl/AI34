@@ -5,7 +5,7 @@
 % Q4: Reconfiguration diamant <-> platoon
 
 %% Experiment Constants
-iterations = 3000;
+iterations = 9000;  % 3x plus long pour voir plusieurs tours
 
 %% Set up the Robotarium object
 N = 5;  % 1 leader + 4 followers (Q2 requirement)
