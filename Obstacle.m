@@ -5,12 +5,17 @@
 % Q4: Reconfiguration diamant <-> platoon
 
 %% Experiment Constants
-iterations = 9000;  % 3x plus long pour voir plusieurs tours
+iterations = 15000;  % Plus long pour bien observer
 
 %% Set up the Robotarium object
 N = 5;  % 1 leader + 4 followers (Q2 requirement)
-rng(42);  % Seed fixe pour reproductibilite
-initial_positions = generate_initial_conditions(N, 'Width', 1.5, 'Height', 1.0, 'Spacing', 0.3);
+
+% Position initiale: entre G4(-1.2,-0.7) et G1(-1.2,0.7), orienté vers G1
+% Leader au centre, followers en formation diamant derrière
+initial_positions = [-1.2, -1.0, -1.0, -1.2, -1.4;   % x: tous à gauche
+                      0.0, -0.15,  0.15, -0.30, -0.45; % y: entre G4 et G1
+                      pi/2, pi/2, pi/2, pi/2, pi/2];   % theta: orientés vers le haut (vers G1)
+
 r = Robotarium('NumberOfRobots', N, 'ShowFigure', true, 'InitialConditions', initial_positions);
 
 %% Topologie Rigide (Diamant) - Q2
@@ -65,13 +70,16 @@ repulsion_gain = 0.05;
 si_to_uni_dyn = create_si_to_uni_dynamics('LinearVelocityGain', 0.8);
 uni_barrier_cert = create_uni_barrier_certificate_with_boundary();
 
-% Smooth waypoint controller based on Vilca et al. (2015)
+% Smooth waypoint controller with Bezier cornering
 smooth_leader_controller = create_smooth_waypoint_controller(...
-    'LinearVelocityGain', 0.30, ...
+    'LinearVelocityGain', 0.20, ...
     'PositionError', 0.2, ...
     'LookAheadGain', 0.6, ...
-    'MinimumVelocity', 0.04, ...
-    'VelocityMagnitudeLimit', 0.10);
+    'MinimumVelocity', 0.02, ...
+    'VelocityMagnitudeLimit', 0.06, ...
+    'BezierZoneRadius', 0.5, ...
+    'BezierExitLength', 0.35, ...
+    'BezierVelocity', 0.06);
 
 % Waypoints agrandis (plus proches des bords du Robotarium)
 waypoints = [-1.2 0.7; 1.2 0.7; 1.2 -0.7; -1.2 -0.7]';
@@ -99,9 +107,18 @@ for k = 1:length(rows)
    lf(k) = line([x(1,rows(k)), x(1,cols(k))],[x(2,rows(k)), x(2,cols(k))], 'LineWidth', line_width, 'Color', 'b'); 
 end
 leader_label = text(500, 500, 'Leader', 'FontSize', font_size, 'FontWeight', 'bold', 'Color', 'r');
-for j = 1:N-1    
+for j = 1:N-1
     follower_labels{j} = text(500, 500, sprintf('F%d', j), 'FontSize', font_size, 'FontWeight', 'bold');
 end
+
+%% DEBUG BEZIER - Marqueurs visuels (initialisés hors écran)
+bezier_markers = struct();
+bezier_markers.zone_marker = plot(10, 10, 'ro', 'MarkerSize', 15, 'LineWidth', 3, 'MarkerFaceColor', 'r');
+bezier_markers.P0_marker = plot(10, 10, 'gs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'g');
+bezier_markers.P1_marker = plot(10, 10, 'rs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'r');
+bezier_markers.P2_marker = plot(10, 10, 'bs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'b');
+bezier_markers.bezier_curve = plot(10, 10, 'm-', 'LineWidth', 2);
+bezier_markers.target_marker = plot(10, 10, 'c*', 'MarkerSize', 15, 'LineWidth', 2);
 
 %% Définition des edges pour la métrique de formation (Q2.ii & Q2.iii)
 % 7 edges définissant la forme DIAMANT (2N-3 pour N=5)
@@ -149,12 +166,17 @@ for t = 1:iterations
         current_offsets(i,:) = (R * current_offsets_local(i,:)')';
     end
 
-    %% 2. COMMANDE LEADER - Smooth Navigation (Q1)
-    % Use smooth controller with full pose (x, y, theta) and look-ahead
-    dxi(:, 1) = smooth_leader_controller(x(:, 1), waypoints, state);
+    %% 2. COMMANDE LEADER - Smooth Navigation avec Bézier (Q1)
+    leader_pos = x(1:2, 1);
 
-    waypoint = waypoints(:, state);
-    if(norm(x(1:2, 1) - waypoint) < close_enough)
+    % Appel au contrôleur (toute la logique Bézier est encapsulée)
+    [dxi(:, 1), bezier_info] = smooth_leader_controller(x(:, 1), waypoints, state);
+
+    % Mise à jour des marqueurs debug
+    update_bezier_debug_markers(bezier_markers, bezier_info, leader_pos);
+
+    % Switch waypoint si courbe terminée
+    if bezier_info.bezier_completed
         state = mod(state, size(waypoints, 2)) + 1;
     end
     
@@ -231,8 +253,9 @@ for t = 1:iterations
         robot_distance(d,t) = norm(x(1:2,d) - x(1:2,d+1), 2);
     end
     robot_distance(N+1,t) = toc(start_time);  % Timestamp
-    if(norm(x(1:2, 1) - waypoint) < close_enough)
-        goal_distance = [goal_distance [norm(x(1:2, 1) - waypoint);toc(start_time)]];
+    current_waypoint = waypoints(:, state);
+    if(norm(x(1:2, 1) - current_waypoint) < close_enough)
+        goal_distance = [goal_distance [norm(x(1:2, 1) - current_waypoint);toc(start_time)]];
     end
     
     r.step();
