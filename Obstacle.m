@@ -9,8 +9,13 @@ iterations = 15000;  % Plus long pour bien observer
 
 %% Set up the Robotarium object
 N = 5;  % 1 leader + 4 followers (Q2 requirement)
-rng(42);  % Seed fixe pour reproductibilite
-initial_positions = generate_initial_conditions(N, 'Width', 1.5, 'Height', 1.0, 'Spacing', 0.3);
+
+% Position initiale: entre G4(-1.2,-0.7) et G1(-1.2,0.7), orienté vers G1
+% Leader au centre, followers en formation diamant derrière
+initial_positions = [-1.2, -1.0, -1.0, -1.2, -1.4;   % x: tous à gauche
+                      0.0, -0.15,  0.15, -0.30, -0.45; % y: entre G4 et G1
+                      pi/2, pi/2, pi/2, pi/2, pi/2];   % theta: orientés vers le haut (vers G1)
+
 r = Robotarium('NumberOfRobots', N, 'ShowFigure', true, 'InitialConditions', initial_positions);
 
 %% Topologie Rigide (Diamant) - Q2
