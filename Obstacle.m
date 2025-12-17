@@ -70,13 +70,16 @@ repulsion_gain = 0.05;
 si_to_uni_dyn = create_si_to_uni_dynamics('LinearVelocityGain', 0.8);
 uni_barrier_cert = create_uni_barrier_certificate_with_boundary();
 
-% Smooth waypoint controller based on Vilca et al. (2015)
+% Smooth waypoint controller with Bezier cornering
 smooth_leader_controller = create_smooth_waypoint_controller(...
     'LinearVelocityGain', 0.20, ...
     'PositionError', 0.2, ...
     'LookAheadGain', 0.6, ...
     'MinimumVelocity', 0.02, ...
-    'VelocityMagnitudeLimit', 0.06);
+    'VelocityMagnitudeLimit', 0.06, ...
+    'BezierZoneRadius', 0.5, ...
+    'BezierExitLength', 0.35, ...
+    'BezierVelocity', 0.06);
 
 % Waypoints agrandis (plus proches des bords du Robotarium)
 waypoints = [-1.2 0.7; 1.2 0.7; 1.2 -0.7; -1.2 -0.7]';
@@ -108,22 +111,14 @@ for j = 1:N-1
     follower_labels{j} = text(500, 500, sprintf('F%d', j), 'FontSize', font_size, 'FontWeight', 'bold');
 end
 
-%% DEBUG BEZIER - Visualisation des points de courbe
-bezier_zone_radius = 0.5;  % Zone où on active Bézier
-bezier_L = 0.35;           % Distance P2 depuis le coin (P0 = position robot à l'entrée)
-
-% État Bézier: on sauvegarde P0 quand le robot entre dans la zone
-in_bezier_zone = false;
-saved_P0 = [0; 0];
-current_bezier_state = 0;  % Quel waypoint on contourne
-
-% Marqueurs visuels (initialisés hors écran)
-zone_marker = plot(10, 10, 'ro', 'MarkerSize', 15, 'LineWidth', 3, 'MarkerFaceColor', 'r');  % Point rouge = dans la zone
-P0_marker = plot(10, 10, 'gs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'g');    % P0 vert
-P1_marker = plot(10, 10, 'rs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'r');    % P1 rouge (waypoint)
-P2_marker = plot(10, 10, 'bs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'b');    % P2 bleu
-bezier_curve = plot(10, 10, 'm-', 'LineWidth', 2);  % Courbe Bézier magenta
-target_marker = plot(10, 10, 'c*', 'MarkerSize', 15, 'LineWidth', 2);  % Target = direction tangente
+%% DEBUG BEZIER - Marqueurs visuels (initialisés hors écran)
+bezier_markers = struct();
+bezier_markers.zone_marker = plot(10, 10, 'ro', 'MarkerSize', 15, 'LineWidth', 3, 'MarkerFaceColor', 'r');
+bezier_markers.P0_marker = plot(10, 10, 'gs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'g');
+bezier_markers.P1_marker = plot(10, 10, 'rs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'r');
+bezier_markers.P2_marker = plot(10, 10, 'bs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'b');
+bezier_markers.bezier_curve = plot(10, 10, 'm-', 'LineWidth', 2);
+bezier_markers.target_marker = plot(10, 10, 'c*', 'MarkerSize', 15, 'LineWidth', 2);
 
 %% Définition des edges pour la métrique de formation (Q2.ii & Q2.iii)
 % 7 edges définissant la forme DIAMANT (2N-3 pour N=5)
@@ -173,109 +168,16 @@ for t = 1:iterations
 
     %% 2. COMMANDE LEADER - Smooth Navigation avec Bézier (Q1)
     leader_pos = x(1:2, 1);
-    waypoint = waypoints(:, state);
-    dist_to_wp = norm(waypoint - leader_pos);
 
-    % Waypoints: current et next
-    num_wp = size(waypoints, 2);
-    next_idx = mod(state, num_wp) + 1;
-    wp_curr = waypoints(:, state);
-    wp_next = waypoints(:, next_idx);
+    % Appel au contrôleur (toute la logique Bézier est encapsulée)
+    [dxi(:, 1), bezier_info] = smooth_leader_controller(x(:, 1), waypoints, state);
 
-    % Variable pour savoir si on a fini la courbe
-    bezier_completed = false;
+    % Mise à jour des marqueurs debug
+    update_bezier_debug_markers(bezier_markers, bezier_info, leader_pos);
 
-    if dist_to_wp < bezier_zone_radius
-        % === DANS LA ZONE BEZIER ===
-
-        % Détecter l'ENTRÉE dans la zone (nouveau waypoint ou première fois)
-        if ~in_bezier_zone || current_bezier_state ~= state
-            % On vient d'entrer! Sauvegarder la position comme P0
-            saved_P0 = leader_pos;
-            in_bezier_zone = true;
-            current_bezier_state = state;
-        end
-
-        % Afficher le marqueur rouge sur le leader
-        zone_marker.XData = leader_pos(1);
-        zone_marker.YData = leader_pos(2);
-
-        % Direction sortante (vers le prochain waypoint)
-        dir_out = (wp_next - wp_curr) / norm(wp_next - wp_curr);
-
-        % Points de contrôle Bézier
-        P0 = saved_P0;                       % Point d'entrée = où le robot ÉTAIT
-        P1 = wp_curr;                        % Le coin (point de contrôle)
-        P2 = wp_curr + bezier_L * dir_out;  % Point de sortie (sur segment sortant)
-
-        % Afficher P0, P1, P2
-        P0_marker.XData = P0(1); P0_marker.YData = P0(2);
-        P1_marker.XData = P1(1); P1_marker.YData = P1(2);
-        P2_marker.XData = P2(1); P2_marker.YData = P2(2);
-
-        % Tracer la courbe Bézier (20 points)
-        t_vals = linspace(0, 1, 20);
-        curve_x = zeros(1, 20);
-        curve_y = zeros(1, 20);
-        for k = 1:20
-            tv = t_vals(k);
-            % B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
-            point = (1-tv)^2 * P0 + 2*(1-tv)*tv * P1 + tv^2 * P2;
-            curve_x(k) = point(1);
-            curve_y(k) = point(2);
-        end
-        bezier_curve.XData = curve_x;
-        bezier_curve.YData = curve_y;
-
-        % Calculer t (progression du robot sur la courbe)
-        vec_P0_P2 = P2 - P0;
-        vec_P0_robot = leader_pos - P0;
-        t_robot = dot(vec_P0_robot, vec_P0_P2) / dot(vec_P0_P2, vec_P0_P2);
-        t_robot = max(0, min(1.2, t_robot));  % Permettre léger dépassement
-
-        % TANGENTE de la courbe Bézier au point t
-        % B'(t) = 2(1-t)(P1-P0) + 2t(P2-P1)
-        t_clamped = min(1, t_robot);
-        tangent = 2*(1-t_clamped)*(P1-P0) + 2*t_clamped*(P2-P1);
-        tangent_norm = tangent / norm(tangent);
-
-        % Target = position actuelle + direction tangente (pour visualisation)
-        target_point = leader_pos + 0.15 * tangent_norm;
-        target_marker.XData = target_point(1);
-        target_marker.YData = target_point(2);
-
-        % === COMMANDE: SUIVRE LA TANGENTE ===
-        bezier_velocity = 0.06;  % Vitesse dans la courbe
-        dxi(:, 1) = bezier_velocity * tangent_norm;
-
-        % Vérifier si on a fini la courbe (t > 0.95)
-        if t_robot > 0.95
-            bezier_completed = true;
-        end
-
-    else
-        % === HORS ZONE: contrôleur normal ===
-        in_bezier_zone = false;
-        dxi(:, 1) = smooth_leader_controller(x(:, 1), waypoints, state);
-
-        % Cacher les marqueurs
-        zone_marker.XData = 10; zone_marker.YData = 10;
-        P0_marker.XData = 10; P0_marker.YData = 10;
-        P1_marker.XData = 10; P1_marker.YData = 10;
-        P2_marker.XData = 10; P2_marker.YData = 10;
-        bezier_curve.XData = 10; bezier_curve.YData = 10;
-        target_marker.XData = 10; target_marker.YData = 10;
-
-        % Switch waypoint si assez proche (ancien comportement hors courbe)
-        if dist_to_wp < close_enough
-            bezier_completed = true;
-        end
-    end
-
-    % === SWITCH WAYPOINT ===
-    if bezier_completed
+    % Switch waypoint si courbe terminée
+    if bezier_info.bezier_completed
         state = mod(state, size(waypoints, 2)) + 1;
-        in_bezier_zone = false;  % Reset pour le prochain virage
     end
     
     %% 3. COMMANDE FOLLOWERS (Q2)
@@ -351,8 +253,9 @@ for t = 1:iterations
         robot_distance(d,t) = norm(x(1:2,d) - x(1:2,d+1), 2);
     end
     robot_distance(N+1,t) = toc(start_time);  % Timestamp
-    if(norm(x(1:2, 1) - waypoint) < close_enough)
-        goal_distance = [goal_distance [norm(x(1:2, 1) - waypoint);toc(start_time)]];
+    current_waypoint = waypoints(:, state);
+    if(norm(x(1:2, 1) - current_waypoint) < close_enough)
+        goal_distance = [goal_distance [norm(x(1:2, 1) - current_waypoint);toc(start_time)]];
     end
     
     r.step();
