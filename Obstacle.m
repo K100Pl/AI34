@@ -5,7 +5,7 @@
 % Q4: Reconfiguration diamant <-> platoon
 
 %% Experiment Constants
-iterations = 9000;  % 3x plus long pour voir plusieurs tours
+iterations = 15000;  % Plus long pour bien observer
 
 %% Set up the Robotarium object
 N = 5;  % 1 leader + 4 followers (Q2 requirement)
@@ -67,11 +67,11 @@ uni_barrier_cert = create_uni_barrier_certificate_with_boundary();
 
 % Smooth waypoint controller based on Vilca et al. (2015)
 smooth_leader_controller = create_smooth_waypoint_controller(...
-    'LinearVelocityGain', 0.30, ...
+    'LinearVelocityGain', 0.20, ...
     'PositionError', 0.2, ...
     'LookAheadGain', 0.6, ...
-    'MinimumVelocity', 0.04, ...
-    'VelocityMagnitudeLimit', 0.10);
+    'MinimumVelocity', 0.02, ...
+    'VelocityMagnitudeLimit', 0.06);
 
 % Waypoints agrandis (plus proches des bords du Robotarium)
 waypoints = [-1.2 0.7; 1.2 0.7; 1.2 -0.7; -1.2 -0.7]';
@@ -99,9 +99,21 @@ for k = 1:length(rows)
    lf(k) = line([x(1,rows(k)), x(1,cols(k))],[x(2,rows(k)), x(2,cols(k))], 'LineWidth', line_width, 'Color', 'b'); 
 end
 leader_label = text(500, 500, 'Leader', 'FontSize', font_size, 'FontWeight', 'bold', 'Color', 'r');
-for j = 1:N-1    
+for j = 1:N-1
     follower_labels{j} = text(500, 500, sprintf('F%d', j), 'FontSize', font_size, 'FontWeight', 'bold');
 end
+
+%% DEBUG BEZIER - Visualisation des points de courbe
+bezier_zone_radius = 0.5;  % Zone où on active Bézier
+bezier_L = 0.35;           % Distance P0/P2 depuis le coin
+
+% Marqueurs visuels (initialisés hors écran)
+zone_marker = plot(10, 10, 'ro', 'MarkerSize', 15, 'LineWidth', 3, 'MarkerFaceColor', 'r');  % Point rouge = dans la zone
+P0_marker = plot(10, 10, 'gs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'g');    % P0 vert
+P1_marker = plot(10, 10, 'rs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'r');    % P1 rouge (waypoint)
+P2_marker = plot(10, 10, 'bs', 'MarkerSize', 10, 'LineWidth', 2, 'MarkerFaceColor', 'b');    % P2 bleu
+bezier_curve = plot(10, 10, 'm-', 'LineWidth', 2);  % Courbe Bézier magenta
+target_marker = plot(10, 10, 'c*', 'MarkerSize', 15, 'LineWidth', 2);  % Target cyan
 
 %% Définition des edges pour la métrique de formation (Q2.ii & Q2.iii)
 % 7 edges définissant la forme DIAMANT (2N-3 pour N=5)
@@ -156,6 +168,73 @@ for t = 1:iterations
     waypoint = waypoints(:, state);
     if(norm(x(1:2, 1) - waypoint) < close_enough)
         state = mod(state, size(waypoints, 2)) + 1;
+    end
+
+    %% DEBUG BEZIER - Calcul et affichage de la géométrie
+    leader_pos = x(1:2, 1);
+    dist_to_wp = norm(waypoint - leader_pos);
+
+    % Waypoints: prev, current, next
+    num_wp = size(waypoints, 2);
+    prev_idx = mod(state - 2, num_wp) + 1;
+    next_idx = mod(state, num_wp) + 1;
+    wp_prev = waypoints(:, prev_idx);
+    wp_curr = waypoints(:, state);
+    wp_next = waypoints(:, next_idx);
+
+    if dist_to_wp < bezier_zone_radius
+        % === DANS LA ZONE BEZIER ===
+        % Afficher le marqueur rouge sur le leader
+        zone_marker.XData = leader_pos(1);
+        zone_marker.YData = leader_pos(2);
+
+        % Calculer les directions
+        dir_in = (wp_curr - wp_prev) / norm(wp_curr - wp_prev);   % Direction entrante
+        dir_out = (wp_next - wp_curr) / norm(wp_next - wp_curr);  % Direction sortante
+
+        % Points de contrôle Bézier
+        P0 = wp_curr - bezier_L * dir_in;   % Point d'entrée (sur segment entrant)
+        P1 = wp_curr;                        % Le coin (point de contrôle)
+        P2 = wp_curr + bezier_L * dir_out;  % Point de sortie (sur segment sortant)
+
+        % Afficher P0, P1, P2
+        P0_marker.XData = P0(1); P0_marker.YData = P0(2);
+        P1_marker.XData = P1(1); P1_marker.YData = P1(2);
+        P2_marker.XData = P2(1); P2_marker.YData = P2(2);
+
+        % Tracer la courbe Bézier (20 points)
+        t_vals = linspace(0, 1, 20);
+        curve_x = zeros(1, 20);
+        curve_y = zeros(1, 20);
+        for k = 1:20
+            tv = t_vals(k);
+            % B(t) = (1-t)²P0 + 2(1-t)tP1 + t²P2
+            point = (1-tv)^2 * P0 + 2*(1-tv)*tv * P1 + tv^2 * P2;
+            curve_x(k) = point(1);
+            curve_y(k) = point(2);
+        end
+        bezier_curve.XData = curve_x;
+        bezier_curve.YData = curve_y;
+
+        % Calculer t (progression du robot sur la courbe)
+        vec_P0_P2 = P2 - P0;
+        vec_P0_robot = leader_pos - P0;
+        t_robot = dot(vec_P0_robot, vec_P0_P2) / dot(vec_P0_P2, vec_P0_P2);
+        t_robot = max(0, min(1, t_robot));
+
+        % Target = point en avance sur la courbe
+        t_target = min(1, t_robot + 0.25);
+        target_point = (1-t_target)^2 * P0 + 2*(1-t_target)*t_target * P1 + t_target^2 * P2;
+        target_marker.XData = target_point(1);
+        target_marker.YData = target_point(2);
+    else
+        % Hors zone: cacher les marqueurs
+        zone_marker.XData = 10; zone_marker.YData = 10;
+        P0_marker.XData = 10; P0_marker.YData = 10;
+        P1_marker.XData = 10; P1_marker.YData = 10;
+        P2_marker.XData = 10; P2_marker.YData = 10;
+        bezier_curve.XData = 10; bezier_curve.YData = 10;
+        target_marker.XData = 10; target_marker.YData = 10;
     end
     
     %% 3. COMMANDE FOLLOWERS (Q2)
