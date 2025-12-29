@@ -5,7 +5,7 @@
 % Q4: Reconfiguration diamant <-> platoon
 
 %% Experiment Constants
-iterations = 15000;  % Plus long pour bien observer
+iterations = 3000;  % Réduit pour tests rapides
 
 %% Set up the Robotarium object
 N = 5;  % 1 leader + 4 followers (Q2 requirement)
@@ -67,7 +67,7 @@ safe_radius = 0.25;
 repulsion_gain = 0.05;  
 
 %% Tools
-si_to_uni_dyn = create_si_to_uni_dynamics('LinearVelocityGain', 0.8);
+si_to_uni_dyn = create_si_to_uni_dynamics('LinearVelocityGain', 0.4);
 uni_barrier_cert = create_uni_barrier_certificate_with_boundary();
 
 % Smooth waypoint controller with Bezier cornering
@@ -131,6 +131,11 @@ robot_distance = zeros(N+1, iterations);  % N distances + timestamp
 formation_error = zeros(1, iterations);   % E(t) = Σ(d - d*)² (Q2.ii)
 goal_distance = [];
 start_time = tic;
+
+% Nouvelles métriques pour graphiques
+leader_trajectory = zeros(2, iterations);  % Position (x,y) du leader
+formation_mode = zeros(1, iterations);     % 0=diamant, 1=platoon
+bezier_active = zeros(1, iterations);      % 1=dans zone Bézier
 
 dxi(:, 1) = [0.01; 0.01];
 r.step();
@@ -248,6 +253,11 @@ for t = 1:iterations
     end
     formation_error(t) = E_t;
 
+    % Nouvelles métriques pour graphiques
+    leader_trajectory(:, t) = x(1:2, 1);
+    formation_mode(t) = (dist_to_obs < detect_radius);  % 1=platoon, 0=diamant
+    bezier_active(t) = bezier_info.in_bezier_zone;
+
     % Data Saving - distances entre robots consécutifs
     for d = 1:N-1
         robot_distance(d,t) = norm(x(1:2,d) - x(1:2,d+1), 2);
@@ -265,6 +275,7 @@ end
 save('DistanceData.mat', 'robot_distance');
 save('GoalData.mat', 'goal_distance');
 save('FormationError.mat', 'formation_error', 'edges');
+save('TrajectoryData.mat', 'leader_trajectory', 'formation_mode', 'bezier_active');
 
 %% Affichage des statistiques de formation (Q2.ii)
 fprintf('\n=== MÉTRIQUE DE FORMATION - RIGIDE (Q2.iii) ===\n');
@@ -304,6 +315,15 @@ total_shape_error = (d_13_actual-d_13_desired)^2 + (d_14_actual-d_14_desired)^2 
 fprintf('\nErreur de FORME (3 distances de reference): %.6f\n', total_shape_error);
 
 r.debug();
+
+%% Génération des graphiques statistiques
+plot_simulation_results(formation_error, robot_distance, leader_trajectory, ...
+    formation_mode, bezier_active, waypoints, obstacles, ...
+    h_diamond_local, h_platoon_local, edges);
+
+%% Attendre que l'utilisateur ferme manuellement
+fprintf('\n=== Appuyez sur une touche pour fermer ===\n');
+pause;
 
 %% Helper Functions (Identique)
 function marker_size = determine_marker_size(robotarium_instance, marker_size_meters)
